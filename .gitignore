@@ -20,3 +20,5 @@ dist/
 
 
 backend/.venv/
+
+*.pyc
