@@ -9,7 +9,9 @@
   font-weight: 600;
 }
 
-.lab-panel { min-height: 340px; }
+.lab-panel {
+  min-height: 340px;
+}
 
 .lab-form {
   display: grid;
@@ -54,6 +56,13 @@
   letter-spacing: -0.12px;
 }
 
+/* 分析请求失败时的提示文案（这一节新增） */
+.lab-error {
+  color: #b42318;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
 .primary-button {
   justify-self: start;
   min-width: 128px;
@@ -68,7 +77,9 @@
   transition: opacity 0.2s;
 }
 
-.primary-button:hover { opacity: 0.86; }
+.primary-button:hover {
+  opacity: 0.86;
+}
 
 .result-stack {
   display: grid;
