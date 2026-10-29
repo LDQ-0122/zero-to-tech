@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI,Request,Response
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from pypinyin import lazy_pinyin, Style
@@ -8,7 +8,7 @@ import os, json, re
 from dotenv import load_dotenv
 from storage import init_db,save_record,get_history
 from datetime import datetime, timezone
-
+import uuid
 init_db()
 
 
@@ -28,7 +28,20 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],
     allow_methods=["GET", "POST"],
+    allow_headers=["*"],
+    allow_credentials=True,
 )
+
+def get_session_id(request: Request, response: Response) -> str:
+    sid = request.cookies.get("session_id")      # 先看有没有纸条
+    if not sid:                                  # 第一次来，没有——发一张
+        sid = uuid.uuid4().hex                    # 一串随机、不重复的 id
+        response.set_cookie(
+            "session_id", sid,
+            httponly=True, samesite="lax",
+            max_age=60 * 60 * 24 * 30,            # 记 30 天
+        )
+    return sid
 
 
 profile = {
@@ -62,7 +75,8 @@ def score_label(score):
         return "中性"
 
 @app.post("/api/analyze")
-def analyze(req: AnalyzeRequest):
+def analyze(req: AnalyzeRequest, request: Request, response: Response):
+    sid = get_session_id(request, response)
     text = req.text
     try:
         # 优先用 GLM 算情绪
@@ -78,7 +92,7 @@ def analyze(req: AnalyzeRequest):
         match = re.search(r"\{.*\}", content, re.S)
         data = json.loads(match.group(0))
         score = float(data["score"])
-        label = data["label"]
+        label = score_label(score)
     except Exception:
         # GLM 调用失败时，退回 SnowNLP，界面不崩
         score = round(SnowNLP(text).sentiments, 2)
@@ -91,10 +105,10 @@ def analyze(req: AnalyzeRequest):
         "pinyin": " ".join(lazy_pinyin(text, style=Style.TONE)),
         "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),  # ← 新增
     }
-    save_record(result)                                                          # ← 存档到文件
+    save_record(sid,result)                                                          # ← 存档到文件
     return result
 
 @app.get("/api/history")
-def history():
-    return get_history(10)
-    
+def history(request: Request, response: Response, limit: int = 10):
+    sid = get_session_id(request, response)
+    return get_history(sid, limit) 
