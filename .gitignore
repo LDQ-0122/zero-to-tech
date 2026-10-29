@@ -18,7 +18,10 @@ dist/
 *.log
 .env*
 
-
+# 构建文件
 backend/.venv/
-
+backend/__pycache__
 *.pyc
+# 数据库文件
+backend/*.db
+

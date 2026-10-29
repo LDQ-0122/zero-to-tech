@@ -3,6 +3,23 @@ from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from pypinyin import lazy_pinyin, Style
 from snownlp import SnowNLP
+from zhipuai import ZhipuAI
+import os, json, re
+from dotenv import load_dotenv
+from storage import init_db,save_record,get_history
+from datetime import datetime, timezone
+
+init_db()
+
+
+
+load_dotenv()  # 读 backend/.env
+client = ZhipuAI(api_key=os.getenv("ZHIPU_API_KEY"))
+
+GLM_PROMPT = """你是中文情感分析器。分析用户文本的情绪。
+只输出一个 JSON 对象，不要任何多余文字，格式严格如下：
+{"score": 0到1之间的小数, "label": "偏积极/中性/偏消极", "reason": "一句简短理由"}
+score 越接近 1 越积极，越接近 0 越消极。"""
 
 
 # 中间件，解决了cors跨域问题
@@ -46,11 +63,38 @@ def score_label(score):
 
 @app.post("/api/analyze")
 def analyze(req: AnalyzeRequest):
-        text = req.text
-        score = round(SnowNLP(text).sentiments, 2)  
-        return {
+    text = req.text
+    try:
+        # 优先用 GLM 算情绪
+        resp = client.chat.completions.create(
+            model="glm-4-flash",
+            messages=[
+                {"role": "system", "content": GLM_PROMPT},
+                {"role": "user", "content": text},
+            ],
+            temperature=0.1,
+        )
+        content = resp.choices[0].message.content
+        match = re.search(r"\{.*\}", content, re.S)
+        data = json.loads(match.group(0))
+        score = float(data["score"])
+        label = data["label"]
+    except Exception:
+        # GLM 调用失败时，退回 SnowNLP，界面不崩
+        score = round(SnowNLP(text).sentiments, 2)
+        label = score_label(score)
+
+    result = {
         "text": req.text,
-        "score": score,
-        "label": score_label(score),
-        "pinyin":" ".join(lazy_pinyin(text, style=Style.TONE)),
-        }
+        "score": round(score, 2),
+        "label": label,
+        "pinyin": " ".join(lazy_pinyin(text, style=Style.TONE)),
+        "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),  # ← 新增
+    }
+    save_record(result)                                                          # ← 存档到文件
+    return result
+
+@app.get("/api/history")
+def history():
+    return get_history(10)
+    
