@@ -9,6 +9,13 @@ from dotenv import load_dotenv
 from storage import init_db,save_record,get_history
 from datetime import datetime, timezone
 import uuid
+import os
+from dotenv import load_dotenv
+
+load_dotenv()                        # ← 读同目录下的 .env
+
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS").split(",")
+
 init_db()
 
 
@@ -26,7 +33,7 @@ score 越接近 1 越积极，越接近 0 越消极。"""
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
     allow_credentials=True,
